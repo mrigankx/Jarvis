@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import List
 
 import nltk
+import pyautogui as ptg
 import pyowm
 import pyttsx3
 import requests as rq
@@ -154,26 +155,12 @@ class AgentJarvis:
         queryx = query.split()
         queryx = [word for word in queryx if not word in set(stopwords.words('english'))]
         if (self.validateCommand(queryx, self.webSearch)):
-            comp = regex.compile(r'(search)\s*([\w\s]*)')
-            match = regex.search(comp, query)
-            try:
-                squery = match.group(2)
-            except AttributeError:
-                squery = ''
-            squery = squery.replace('about', '').replace(' ', '+')
-            url = 'https://www.google.com/search?q=' + squery
-            self.openFirefox(url)
+            self.getInfoWebSearch(query)
             return
         elif (query == 'change passcode'):
             self.setPassword()
         elif (self.validateCommand(queryx, self.says) and (r'something' in query)):
-            comp = regex.compile(r'(something\s*about)\s*([\w\s]+)')
-            match = regex.search(comp, query)
-            try:
-                self.getDataFromWiki(match)
-            except AttributeError:
-                self.speak('unable to process your request now')
-                self.logger.exception("Exception in 'say something'")
+            self.tellInfoFromWiki(query)
         elif self.validateCommand(queryx, self.var3):
             now = datetime.now()
             self.speak(now.strftime("The time is %H:%M"))
@@ -191,45 +178,15 @@ class AgentJarvis:
             self.speak(random.choice(self.colrep))
             self.speak('It keeps changing every second')
         elif self.validateCommand(queryx, self.cmd5):
-            owm = pyowm.OWM('57a134899fde0edebadf307061e9fd23')
-            observation = owm.weather_at_place('Barpeta, IN')
-            observation_list = owm.weather_around_coords(26.511885, 91.180901)
-            w = observation.get_weather()
-            w.get_wind()
-            w.get_humidity()
-            w.get_temperature('celsius')
-            self.speak(w.get_wind())
-            self.speak('humidity')
-            self.speak(w.get_humidity())
-            self.speak('temperature')
-            self.speak(w.get_temperature('celsius'))
+            self.getWeatherInfo()
         elif self.validateCommand(queryx, self.cmd2):
-            mixer.init()
-            mixer.music.load("song.wav")
-            mixer.music.play()
+            self.playMusic()
 
         elif (r'open' in query):
             if (r'file explorer' in query):  # open [foldername] inside [name of drive] drive in file explorer
-                comp = regex.compile(r'(open)\s*([\w\s]*)\s*inside\s*([\w])\s')
-                match = regex.search(comp, query)
-                try:
-                    drivePath = match.group(3)
-                    folderPath = match.group(2)
-                except:
-                    self.speak("Drive name is missing.....try again")
-                    self.logger.exception("Drive name missing in 'open drive'")
-                path = drivePath + ":/" + folderPath + "/"
-                path = os.path.realpath(path)
-                os.startfile(path)
+                self.openFileExplorer(query)
             else:
-                app = regex.compile(r'(open)\s*([\w\s]*)')
-                match = regex.search(app, query)
-                try:
-                    openApp = match.group(2)
-                except:
-                    self.speak('unable to open the application')
-                    self.logger.exception("Error in opening application")
-                    openApp = ''
+                openApp = self.openAnyApplication(query)
                 if (openApp == 'notepad'):
                     self.openNotepad()
                 else:
@@ -252,6 +209,69 @@ class AgentJarvis:
 
         else:
             self.speak("sorry....invalid voice command...say again")
+
+    def openAnyApplication(self, query):
+        app = regex.compile(r'(open)\s*([\w\s]*)')
+        match = regex.search(app, query)
+        try:
+            openApp = match.group(2)
+        except:
+            self.speak('unable to open the application')
+            self.logger.exception("Error in opening application")
+            openApp = ''
+        return openApp
+
+    def openFileExplorer(self, query):
+        comp = regex.compile(r'(open)\s*([\w\s]*)\s*inside\s*([\w])\s')
+        match = regex.search(comp, query)
+        try:
+            drivePath = match.group(3)
+            folderPath = match.group(2)
+        except:
+            self.speak("Drive name is missing.....try again")
+            self.logger.exception("Drive name missing in 'open drive'")
+        path = drivePath + ":/" + folderPath + "/"
+        path = os.path.realpath(path)
+        os.startfile(path)
+
+    def getInfoWebSearch(self, query):
+        comp = regex.compile(r'(search)\s*([\w\s]*)')
+        match = regex.search(comp, query)
+        try:
+            squery = match.group(2)
+        except AttributeError:
+            squery = ''
+        squery = squery.replace('about', '').replace(' ', '+')
+        url = 'https://www.google.com/search?q=' + squery
+        self.openFirefox(url)
+
+    def tellInfoFromWiki(self, query):
+        comp = regex.compile(r'(something\s*about)\s*([\w\s]+)')
+        match = regex.search(comp, query)
+        try:
+            self.getDataFromWiki(match)
+        except AttributeError:
+            self.speak('unable to process your request now')
+            self.logger.exception("Exception in 'say something'")
+
+    def playMusic(self):
+        mixer.init()
+        mixer.music.load("song.wav")
+        mixer.music.play()
+
+    def getWeatherInfo(self):
+        owm = pyowm.OWM('57a134899fde0edebadf307061e9fd23')
+        observation = owm.weather_at_place('Barpeta, IN')
+        observation_list = owm.weather_around_coords(26.511885, 91.180901)
+        w = observation.get_weather()
+        w.get_wind()
+        w.get_humidity()
+        w.get_temperature('celsius')
+        self.speak(w.get_wind())
+        self.speak('humidity')
+        self.speak(w.get_humidity())
+        self.speak('temperature')
+        self.speak(w.get_temperature('celsius'))
 
     def openNotepad(self):
         path = 'C:\\Windows\\notepad.exe'
@@ -303,13 +323,22 @@ class AgentJarvis:
             self.speak('As your wish!')
 
     def openFirefox(self, url):
-        browser = Firefox()
-        browser.get(url)
+        browser = self.initializeBrowser(url)
         xquery = 'running'
         while (xquery != 'close browser'):
             xquery = self.listenAudio()
             if (xquery == 'close browser'):
                 browser.close()
+
+    def initializeBrowser(self, url):
+        browser = Firefox()
+        browser.get(url)
+        return browser
+
+    def openVideo(self):
+        browser = self.initializeBrowser('https://www.youtube.com/')
+        picPos = ptg.locateCenterOnScreen('trending.jpg')
+        ptg.click(picPos)
 
     def driver(self):
         try:
