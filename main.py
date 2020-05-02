@@ -2,13 +2,13 @@ import logging.config
 import os
 import random
 import re as regex
+import smtplib
 import sys
 import time
 from datetime import datetime
 from typing import List
 
-import nltk
-import pyautogui as ptg
+import mysql.connector
 import pyowm
 import pyttsx3
 import requests as rq
@@ -18,8 +18,6 @@ from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
 from pygame import mixer
 from selenium.webdriver import Firefox
-
-nltk.download('stopwords')
 
 
 class AgentJarvis:
@@ -39,7 +37,7 @@ class AgentJarvis:
     cmd8 = ['what is you favourite colour', 'what is your favourite color']
     cmd9 = ['thank you']
     rep9 = ['youre welcome', 'glad i could help you']
-    webSearch: List[str] = ['web', 'firefox', 'internet']
+    webSearch: List[str] = ['firefox', 'internet', 'browser']
     sound = ['volume', 'sound']
     txtEdit = ['notepad']
     says = ['tell', 'say']
@@ -54,9 +52,22 @@ class AgentJarvis:
     logger = logging.getLogger('Admin_Client')
     posAnswers = ['yes', 'ok', 'yop']
     negAnswers = ['no', 'never', 'nope']
+    mailCmd = ['e-mail', 'mail', 'email']
+    mydb = None
+    usr = None
 
     def __init__(self):
-        print('123')
+        self.mydb = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            passwd="",
+            database="jarvis_data")
+
+    def getDatafromDb(self, Sqlquery):
+        mycursor = self.mydb.cursor()
+        mycursor.execute(Sqlquery)
+        myresult = mycursor.fetchall()
+        return myresult
 
     def speak(self, audio):
         self.engine.say(audio)
@@ -82,6 +93,26 @@ class AgentJarvis:
         except sr.RequestError as e:
             self.logger.error("Could not request results from Google Speech Recognition service; {0}".format(e))
 
+    def listenAudioLong(self):
+        required = -1
+        for index, name in enumerate(sr.Microphone.list_microphone_names()):
+            if "External" in name:
+                required = index
+        # if "Internal" in name:#(without earphone mic)
+        #     required = index
+        print('say now')
+        with sr.Microphone(device_index=required) as source:
+            self.recog.adjust_for_ambient_noise(source)
+            audio = self.recog.listen(source, phrase_time_limit=10)
+        try:
+            givenInput = self.recog.recognize_google(audio)
+            return str(givenInput).lower()
+        except sr.UnknownValueError:
+            print("Google Speech Recognition could not understand audio")
+            self.logger.error("Google Speech Recognition could not understand audio")
+        except sr.RequestError as e:
+            self.logger.error("Could not request results from Google Speech Recognition service; {0}".format(e))
+
     def validateCommand(self, query, givenList):
         for word in query:
             for gword in givenList:
@@ -92,11 +123,11 @@ class AgentJarvis:
     def wishMe(self):
         hour = int(datetime.now().hour)
         if (hour >= 0 and hour < 12):
-            return "Good morning!"
+            return " Good morning!"
         elif (hour >= 12 and hour <= 16):
-            return "Good afternoon!"
+            return " Good afternoon!"
         else:
-            return "Good evening!"
+            return " Good evening!"
 
     def setPassword(self):
         self.speak("please say the master password")
@@ -123,12 +154,13 @@ class AgentJarvis:
             self.logger.debug("invalid master password")
 
     def authUser(self, rpass, pcode):
-        if (pcode == rpass):
+        if (pcode == rpass[0][1]):
             self.speak("Passcode matched.... ")
             self.logger.debug("in authUser().Passcode matched & agent activated.")
             greeting = random.choice(self.greetings)
-            wish = greeting + self.wishMe()
+            wish = greeting + " " + rpass[0][0] + self.wishMe()
             self.speak(wish)
+            self.usr = rpass[0][0]
             self.processRequests()
         else:
             self.speak("Invalid passcode.....Exiting.")
@@ -155,8 +187,17 @@ class AgentJarvis:
         queryx = query.split()
         queryx = [word for word in queryx if not word in set(stopwords.words('english'))]
         if (self.validateCommand(queryx, self.webSearch)):
-            self.getInfoWebSearch(query)
-            return
+            if (r'search' in query):
+                self.getInfoWebSearch(query)
+            elif (r'go to'):
+                comp = regex.compile(r'(go\s*to)\s*([\w\s\.]*)')
+                match = regex.search(comp, query)
+                try:
+                    squery = match.group(2)
+                except AttributeError:
+                    squery = ''
+                url = 'https://' + squery
+                self.openFirefox(url)
         elif (query == 'change passcode'):
             self.setPassword()
         elif (self.validateCommand(queryx, self.says) and (r'something' in query)):
@@ -164,7 +205,8 @@ class AgentJarvis:
         elif self.validateCommand(queryx, self.var3):
             now = datetime.now()
             self.speak(now.strftime("The time is %H:%M"))
-
+        elif self.validateCommand(queryx, self.mailCmd) and self.validateCommand(queryx, ['send']):
+            self.sendEmail()
         elif query in self.question:
             self.speak('I am fine')
 
@@ -330,37 +372,63 @@ class AgentJarvis:
             if (xquery == 'close browser'):
                 browser.close()
 
+    def sendEmail(self):
+        self.speak('Who is the recipient?')
+        recipient = self.listenAudio()
+        if (recipient != None):
+            SqlQueryRecipient = 'SELECT email_id FROM email_list WHERE shortname = "' + recipient + '"'
+            EmailIdList = self.getDatafromDb(SqlQueryRecipient)
+            if (len(EmailIdList)):
+                emailId = EmailIdList[0][0]
+                self.speak('What should I say to him?')
+                content = self.listenAudioLong()
+                self.speak('can i send the message?')
+                resp = self.listenAudio()
+                if (resp == 'yes'):
+                    userSql = 'SELECT email, epass FROM email_auth WHERE cred_id=(SELECT cred_id FROM credentials WHERE username= "' + self.usr + '")'
+                    userEmailCred = self.getDatafromDb(userSql)
+                    username = userEmailCred[0][0]
+                    password = userEmailCred[0][1]
+                    mail = smtplib.SMTP('smtp.gmail.com', 587)
+                    mail.ehlo()
+                    mail.starttls()
+                    mail.login(username, password)
+                    mail.sendmail(username, emailId, content)
+                    mail.close()
+                    self.speak('Email has been sent successfully')
+                else:
+                    self.speak('Email sending cancelled')
+            else:
+                self.speak('no recipients found')
+
     def initializeBrowser(self, url):
         browser = Firefox()
         browser.get(url)
         return browser
 
-    def openVideo(self):
-        browser = self.initializeBrowser('https://www.youtube.com/')
-        picPos = ptg.locateCenterOnScreen('trending.jpg')
-        ptg.click(picPos)
-
-    def driver(self):
+    def driverFunc(self):
         try:
             self.speak("Agent started")
             self.logger.info("Agent started")
-            file = open('passcode.txt', 'r')
-            readFile = file.readline()
-            file.close()
-            if (len(readFile) == 0):
-                self.setPassword()
-            else:
-                self.speak('Say the passcode')
+            self.speak("please verify your identity!")
+            username = self.listenAudio()
+            username = username.replace(' ', '')
+            Sqlquery = 'select username,password from credentials where username="' + username + '"'
+            userData = self.getDatafromDb(Sqlquery)
+            if (len(userData)):
+                self.speak('Say the password')
                 passcode = self.listenAudio()
                 self.logger.debug(passcode)
                 self.speak('Processing passcode')
-                self.authUser(readFile, passcode)
+                self.authUser(userData, passcode)
+            else:
+                self.logger.error("user not found")
+                self.speak('user not found!')
         except Exception as e:
             print(str(e))
             self.logger.exception("Exception in main function(before authentication). message: " + str(e))
         finally:
             logging.shutdown()
-
-
+            self.mydb.close()
 obj = AgentJarvis()
-obj.driver()
+obj.driverFunc()
