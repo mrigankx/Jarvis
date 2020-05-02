@@ -3,9 +3,9 @@ import os
 import random
 import re as regex
 import smtplib
-import sys
 import time
 from datetime import datetime
+from tkinter import *
 from typing import List
 
 import mysql.connector
@@ -430,5 +430,20 @@ class AgentJarvis:
         finally:
             logging.shutdown()
             self.mydb.close()
+
+    def quit(self):
+        sys.exit()
+
+
+root = Tk()
 obj = AgentJarvis()
-obj.driverFunc()
+root.geometry('800x500')
+root.minsize(400, 300)
+photo = PhotoImage(file='spcir.png')
+label = Label(image=photo)
+label.pack()
+startButton = Button(root, text='Start', bg='green', command=obj.driverFunc)
+startButton.pack()
+StopButton = Button(root, text='Stop', bg='red', command=obj.quit)
+StopButton.pack()
+root.mainloop()
