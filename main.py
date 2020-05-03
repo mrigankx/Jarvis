@@ -1,3 +1,4 @@
+import ctypes
 import logging.config
 import os
 import random
@@ -53,15 +54,16 @@ class AgentJarvis:
     posAnswers = ['yes', 'ok', 'yop']
     negAnswers = ['no', 'never', 'nope']
     mailCmd = ['e-mail', 'mail', 'email']
+    mypc = ['pc', 'laptop', 'system', 'computer']
     mydb = None
     usr = None
 
     def __init__(self):
-        self.mydb = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            passwd="",
-            database="jarvis_data")
+        try:
+            self.mydb = mysql.connector.connect(host="localhost", user="root", passwd="", database="jarvis_data")
+        except Exception as e:
+            self.speak("MySQL not connected")
+            self.logger.exception("MySQL not connected.")
 
     def getDatafromDb(self, Sqlquery):
         mycursor = self.mydb.cursor()
@@ -241,14 +243,15 @@ class AgentJarvis:
         elif self.validateCommand(queryx, self.cmdjokes):
             self.speak(random.choice(self.jokes))
 
-        elif (query in self.exitCmd):
-            sys.exit()
-        elif (query == 'shutdown pc'):
+        elif (r'shutdown' in query) and self.validateCommand(queryx, self.mypc):
             os.system("shutdown /s /t 1")
 
-        elif (query == 'restart pc'):
+        elif (r'restart' in query) and self.validateCommand(queryx, self.mypc):
             os.system("shutdown /r /t 1")
-
+        elif (r'lock' in query) and self.validateCommand(queryx, self.mypc):
+            ctypes.windll.user32.LockWorkStation()
+        elif (query in self.exitCmd):
+            sys.exit()
         else:
             self.speak("sorry....invalid voice command...say again")
 
