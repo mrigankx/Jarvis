@@ -55,6 +55,7 @@ class AgentJarvis:
     negAnswers = ['no', 'never', 'nope']
     mailCmd = ['e-mail', 'mail', 'email']
     mypc = ['pc', 'laptop', 'system', 'computer']
+    logoutCmd = ['log', 'sign', 'logout', 'signout']
     mydb = None
     usr = None
 
@@ -200,7 +201,7 @@ class AgentJarvis:
                     squery = ''
                 url = 'https://' + squery
                 self.openFirefox(url)
-        elif (query == 'change passcode'):
+        elif (query == 'change password'):
             self.setPassword()
         elif (self.validateCommand(queryx, self.says) and (r'something' in query)):
             self.tellInfoFromWiki(query)
@@ -250,6 +251,10 @@ class AgentJarvis:
             os.system("shutdown /r /t 1")
         elif (r'lock' in query) and self.validateCommand(queryx, self.mypc):
             ctypes.windll.user32.LockWorkStation()
+
+        elif (self.validateCommand(queryx, self.logoutCmd) or (r'out' in query)) and self.validateCommand(queryx,
+                                                                                                          self.mypc):
+            os.system("shutdown -l")
         elif (query in self.exitCmd):
             sys.exit()
         else:
