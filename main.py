@@ -1,3 +1,9 @@
+'''
+Name: 'Covia'
+Date: 03/05/2020
+Developer: Mriganka Goswami
+'''
+
 import ctypes
 import logging.config
 import os
@@ -65,6 +71,7 @@ class AgentJarvis:
         except Exception as e:
             self.speak("MySQL not connected")
             self.logger.exception("MySQL not connected.")
+            sys.exit()
 
     def getDatafromDb(self, Sqlquery):
         mycursor = self.mydb.cursor()
@@ -243,7 +250,10 @@ class AgentJarvis:
             self.getHeadines(url)
         elif self.validateCommand(queryx, self.cmdjokes):
             self.speak(random.choice(self.jokes))
-
+        elif (query == 'who are you' or query == 'what is your name'):
+            self.speak('I am covia, your personal assistant')
+        elif ('who is your developer' in query) or (r'who made you' in query):
+            self.speak('Mriganka Goswami developed me.')
         elif (r'shutdown' in query) and self.validateCommand(queryx, self.mypc):
             os.system("shutdown /s /t 1")
 
@@ -256,6 +266,7 @@ class AgentJarvis:
                                                                                                           self.mypc):
             os.system("shutdown -l")
         elif (query in self.exitCmd):
+            self.speak('Good bye!')
             sys.exit()
         else:
             self.speak("sorry....invalid voice command...say again")
