@@ -14,20 +14,22 @@ import time
 from datetime import datetime
 from tkinter import *
 from typing import List
+from urllib.request import urlopen
 
 import mysql.connector
 import pyowm
 import pyttsx3
 import requests as rq
 import speech_recognition as sr
+import vlc
 import wikipedia
+import youtube_dl
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
-from pygame import mixer
 from selenium.webdriver import Firefox
 
 
-class AgentJarvis:
+class AgentCovia:
     greetings = ['hey there', 'hello', 'hi', 'hai', 'hey!', 'hey']
     question = ['how are you', 'how are you doing']
     var3 = ['time']
@@ -39,8 +41,10 @@ class AgentJarvis:
     cmd4 = ['open youtube', 'i want to watch a video']
     cmd5 = ['weather']
     exitCmd = ['exit', 'close', 'goodbye', 'nothing']
-    cmd7 = ['what is your color', 'what is your colour', 'your color', 'your color?']
-    colrep = ['right now its rainbow', 'right now its transparent', 'right now its non chromatic']
+    cmd7 = ['what is your color', 'what is your colour',
+            'your color', 'your color?']
+    colrep = ['right now its rainbow',
+              'right now its transparent', 'right now its non chromatic']
     cmd8 = ['what is you favourite colour', 'what is your favourite color']
     cmd9 = ['thank you']
     rep9 = ['youre welcome', 'glad i could help you']
@@ -67,17 +71,22 @@ class AgentJarvis:
 
     def __init__(self):
         try:
-            self.mydb = mysql.connector.connect(host="localhost", user="root", passwd="", database="jarvis_data")
+            self.mydb = mysql.connector.connect(
+                host="localhost", user="root", passwd="", database="jarvis_data")
         except Exception as e:
             self.speak("MySQL not connected")
             self.logger.exception("MySQL not connected.")
             sys.exit()
 
     def getDatafromDb(self, Sqlquery):
-        mycursor = self.mydb.cursor()
-        mycursor.execute(Sqlquery)
+        mycursor = self.setDatatoDb(Sqlquery)
         myresult = mycursor.fetchall()
         return myresult
+
+    def setDatatoDb(self, Sqlquery):
+        mycursor = self.mydb.cursor()
+        mycursor.execute(Sqlquery)
+        return mycursor
 
     def speak(self, audio):
         self.engine.say(audio)
@@ -101,7 +110,8 @@ class AgentJarvis:
             print("Google Speech Recognition could not understand audio")
             self.logger.error("Google Speech Recognition could not understand audio")
         except sr.RequestError as e:
-            self.logger.error("Could not request results from Google Speech Recognition service; {0}".format(e))
+            self.logger.error(
+                "Could not request results from Google Speech Recognition service; {0}".format(e))
 
     def listenAudioLong(self):
         required = -1
@@ -119,9 +129,11 @@ class AgentJarvis:
             return str(givenInput).lower()
         except sr.UnknownValueError:
             print("Google Speech Recognition could not understand audio")
-            self.logger.error("Google Speech Recognition could not understand audio")
+            self.logger.error(
+                "Google Speech Recognition could not understand audio")
         except sr.RequestError as e:
-            self.logger.error("Could not request results from Google Speech Recognition service; {0}".format(e))
+            self.logger.error(
+                "Could not request results from Google Speech Recognition service; {0}".format(e))
 
     def validateCommand(self, query, givenList):
         for word in query:
@@ -141,35 +153,37 @@ class AgentJarvis:
 
     def setPassword(self):
         self.speak("please say the master password")
-        tPass = self.self.listenAudio()
-        print(tPass)
-        mfile = open('master.txt', 'r')
-        masterPass = mfile.readline()
-        mfile.close()
-        if (tPass == masterPass):
-            self.speak("setting new passcode.... say the new passcode")
+        mPass = self.listenAudio()
+        masterPassQuery = "select master_pass from credentials where username = " + self.usr
+        masterPass = self.getDatafromDb(masterPassQuery)
+        if (len(masterPass)) and (mPass == masterPass[0][0]):
+            self.speak("setting new passcode.... say the new password")
             npass = self.listenAudio()
             try:
-                file = open('passcode.txt', "w")
-                file.write(npass)
-                file.close()
+                updateQuery = "update credentials set password ='" + npass + "' where username='" + self.usr + "'"
+                self.setDatatoDb(updateQuery)
                 self.logger.debug("passcode changed successfully.")
-                self.speak('I Successfully set your passcode....restart the agent')
+                self.speak(
+                    'I Successfully set your passcode....restart the agent')
+                sys.exit()
             except Exception as e:
-                self.logger.error("Exception in passcode changing. message: " + str(e))
-                self.speak('Unable to change passcode.')
+                self.logger.error(
+                    "Exception in password changing. message: " + str(e))
+                self.speak('Unable to change password.')
         else:
             self.speak('invalid master password.....exiting')
-            sys.exit()
             self.logger.debug("invalid master password")
+            sys.exit()
 
     def authUser(self, rpass, pcode):
         if (pcode == rpass[0][1]):
             self.speak("Passcode matched.... ")
-            self.logger.debug("in authUser().Passcode matched & agent activated.")
+            self.logger.debug(
+                "in authUser().Passcode matched & agent activated.")
             greeting = random.choice(self.greetings)
             wish = greeting + " " + rpass[0][0] + self.wishMe()
             self.speak(wish)
+            self.getTime()
             self.usr = rpass[0][0]
             self.processRequests()
         else:
@@ -195,7 +209,8 @@ class AgentJarvis:
 
     def processCommands(self, query):
         queryx = query.split()
-        queryx = [word for word in queryx if not word in set(stopwords.words('english'))]
+        queryx = [word for word in queryx if not word in set(
+            stopwords.words('english'))]
         if (self.validateCommand(queryx, self.webSearch)):
             if (r'search' in query):
                 self.getInfoWebSearch(query)
@@ -208,13 +223,12 @@ class AgentJarvis:
                     squery = ''
                 url = 'https://' + squery
                 self.openFirefox(url)
-        elif (query == 'change password'):
+        elif ('change your password' == query):
             self.setPassword()
         elif (self.validateCommand(queryx, self.says) and (r'something' in query)):
             self.tellInfoFromWiki(query)
         elif self.validateCommand(queryx, self.var3):
-            now = datetime.now()
-            self.speak(now.strftime("The time is %H:%M"))
+            self.getTime()
         elif self.validateCommand(queryx, self.mailCmd) and self.validateCommand(queryx, ['send']):
             self.sendEmail()
         elif query in self.question:
@@ -235,7 +249,8 @@ class AgentJarvis:
             self.playMusic()
 
         elif (r'open' in query):
-            if (r'file explorer' in query):  # open [foldername] inside [name of drive] drive in file explorer
+            # open [foldername] inside [name of drive] drive in file explorer
+            if (r'file explorer' in query):
                 self.openFileExplorer(query)
             else:
                 openApp = self.openAnyApplication(query)
@@ -270,6 +285,10 @@ class AgentJarvis:
             sys.exit()
         else:
             self.speak("sorry....invalid voice command...say again")
+
+    def getTime(self):
+        now = datetime.now()
+        self.speak(now.strftime("The time is %H:%M"))
 
     def openAnyApplication(self, query):
         app = regex.compile(r'(open)\s*([\w\s]*)')
@@ -316,9 +335,52 @@ class AgentJarvis:
             self.logger.exception("Exception in 'say something'")
 
     def playMusic(self):
-        mixer.init()
-        mixer.music.load("song.wav")
-        mixer.music.play()
+        path = 'X://Covia//'
+        folder = path
+        for the_file in os.listdir(folder):
+            file_path = os.path.join(folder, the_file)
+            try:
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+            except Exception as e:
+                self.logger.exception("Unable to find directory")
+                self.speak('unable to find music directory')
+        self.speak('Which song shall I play?')
+        mysong = self.listenAudio()
+        if mysong:
+            flag = 0
+            url = "https://www.youtube.com/results?search_query=" + mysong.replace(' ', '+')
+            response = urlopen(url)
+            html = response.read()
+            soup1 = BeautifulSoup(html, "lxml")
+            url_list = []
+            for vid in soup1.findAll(attrs={'class': 'yt-uix-tile-link'}):
+                if ('https://www.youtube.com' + vid['href']).startswith("https://www.youtube.com/watch?v="):
+                    flag = 1
+                    final_url = 'https://www.youtube.com' + vid['href']
+                    url_list.append(final_url)
+            if flag == 1:
+                url = url_list[0]
+                ydl_opts = {}
+                os.chdir(path)
+                with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+                for the_file in os.listdir(folder):
+                    path = os.path.join(folder, the_file)
+                player = vlc.MediaPlayer(path)
+                player.play()
+                duration = player.get_length() / 1000
+                duration = time.time() + duration
+                while True:
+                    exitQuery = self.listenAudio()
+                    if exitQuery != None:
+                        exitQuery = exitQuery.split()
+                        if self.validateCommand(exitQuery, self.exitCmd):
+                            player.stop()
+                            break
+                    continue
+        if flag == 0:
+            self.speak('I have not found anything in Youtube ')
 
     def getWeatherInfo(self):
         owm = pyowm.OWM('57a134899fde0edebadf307061e9fd23')
@@ -379,7 +441,8 @@ class AgentJarvis:
             file = open(drive, 'w+')
             file.write(gotText)
             file.close()
-            self.speak('information saved in docs folder with ' + raNum + ' name.')
+            self.speak('information saved in docs folder with ' +
+                       raNum + ' name.')
         elif self.validateCommand(answer, self.negAnswers):
             self.speak('As your wish!')
 
@@ -443,9 +506,11 @@ class AgentJarvis:
             else:
                 self.logger.error("user not found")
                 self.speak('user not found!')
+                sys.exit()
         except Exception as e:
-            print(str(e))
-            self.logger.exception("Exception in main function(before authentication). message: " + str(e))
+
+            self.logger.exception(
+                "Exception in main function(before authentication). message: " + str(e))
         finally:
             logging.shutdown()
             self.mydb.close()
@@ -455,7 +520,7 @@ class AgentJarvis:
 
 
 root = Tk()
-obj = AgentJarvis()
+obj = AgentCovia()
 root.geometry('800x500')
 root.minsize(400, 300)
 photo = PhotoImage(file='spcir.png')
