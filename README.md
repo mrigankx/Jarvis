@@ -1,15 +1,15 @@
 Install these python libraries:
-tkinter
-mysql
-pyowm
-pyttsx3
-requests
-speech_recognition
-vlc
-wikipedia
-youtube_dl
-bs4
-selenium
+tkinter,
+mysql,
+pyowm,
+pyttsx3,
+requests,
+speech_recognition,
+vlc,
+wikipedia,
+youtube_dl,
+bs4,
+selenium,
 nltk
 
 Create a Database with name="jarvis_data" and include 3 tables:
