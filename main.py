@@ -119,8 +119,10 @@ class AgentCovia:
         for index, name in enumerate(sr.Microphone.list_microphone_names()):
             if "External" in name:
                 required = index
-        # if "Internal" in name:#(without earphone mic)
-        #     required = index
+        if (required == -1):
+            for index, name in enumerate(sr.Microphone.list_microphone_names()):
+                if "Internal" in name:  # (without earphone mic)
+                    required = index
         print('say now')
         with sr.Microphone(device_index=required) as source:
             self.recog.adjust_for_ambient_noise(source)
@@ -386,11 +388,7 @@ class AgentCovia:
     def getWeatherInfo(self):
         owm = pyowm.OWM('57a134899fde0edebadf307061e9fd23')
         observation = owm.weather_at_place('Barpeta, IN')
-        observation_list = owm.weather_around_coords(26.511885, 91.180901)
         w = observation.get_weather()
-        w.get_wind()
-        w.get_humidity()
-        w.get_temperature('celsius')
         self.speak(w.get_wind())
         self.speak('humidity')
         self.speak(w.get_humidity())
