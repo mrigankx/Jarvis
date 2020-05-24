@@ -3,7 +3,6 @@ Name: 'Covia'
 Date: 03/05/2020
 Developer: Mriganka Goswami
 '''
-
 import ctypes
 import logging.config
 import os
@@ -47,7 +46,7 @@ class AgentCovia:
               'right now its transparent', 'right now its non chromatic']
     cmd8 = ['what is you favourite colour', 'what is your favourite color']
     cmd9 = ['thank you']
-    rep9 = ['youre welcome', 'glad i could help you']
+    rep9 = ["you're welcome", 'glad i could help you']
     webSearch: List[str] = ['firefox', 'internet', 'browser']
     sound = ['volume', 'sound']
     txtEdit = ['notepad']
@@ -63,7 +62,7 @@ class AgentCovia:
     logger = logging.getLogger('Admin_Client')
     posAnswers = ['yes', 'ok', 'yop']
     negAnswers = ['no', 'never', 'nope']
-    mailCmd = ['e-mail', 'mail', 'email']
+    mailCmd = ['mail', 'email']
     mypc = ['pc', 'laptop', 'system', 'computer']
     logoutCmd = ['log', 'sign', 'logout', 'signout']
     mydb = None
@@ -72,7 +71,7 @@ class AgentCovia:
     def __init__(self):
         try:
             self.mydb = mysql.connector.connect(
-                host="localhost", user="root", passwd="", database="jarvis_data")
+                host="localhost", user="root", passwd="password", database="jarvis_data")
         except Exception as e:
             self.speak("MySQL not connected")
             self.logger.exception("MySQL not connected.")
@@ -97,8 +96,10 @@ class AgentCovia:
         for index, name in enumerate(sr.Microphone.list_microphone_names()):
             if "External" in name:
                 required = index
-            # if "Internal" in name:#(without earphone mic)
-            #     required = index
+        if (required == -1):
+            for index, name in enumerate(sr.Microphone.list_microphone_names()):
+                if "Internal" in name:  # (without earphone mic)
+                    required = index
         print('say now')
         with sr.Microphone(device_index=required) as source:
             self.recog.adjust_for_ambient_noise(source)
