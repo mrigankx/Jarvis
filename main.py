@@ -67,7 +67,7 @@ class AgentCovia:
     logoutCmd = ['log', 'sign', 'logout', 'signout']
     mydb = None
     usr = None
-
+    permissions ={"email_access": 0,"internet_access": 0,"master_access": 0}
     def __init__(self):
         try:
             self.mydb = mysql.connector.connect(
@@ -155,29 +155,22 @@ class AgentCovia:
             return " Good evening!"
 
     def setPassword(self):
-        self.speak("please say the master password")
-        mPass = self.listenAudio()
-        masterPassQuery = "select master_pass from credentials where username = " + self.usr
-        masterPass = self.getDatafromDb(masterPassQuery)
-        if (len(masterPass)) and (mPass == masterPass[0][0]):
-            self.speak("setting new passcode.... say the new password")
-            npass = self.listenAudio()
+        if(self.permissions["master_access"]==1):
+            self.speak("setting new passcode.... enter the new password")
+            npass = str(input())
             try:
                 updateQuery = "update credentials set password ='" + npass + "' where username='" + self.usr + "'"
                 self.setDatatoDb(updateQuery)
                 self.logger.debug("passcode changed successfully.")
                 self.speak(
-                    'I Successfully set your passcode....restart the agent')
-                sys.exit()
+                        'I Successfully changed your passcode....')
             except Exception as e:
                 self.logger.error(
-                    "Exception in password changing. message: " + str(e))
+                        "Exception in password changing. message: " + str(e))
                 self.speak('Unable to change password.')
         else:
-            self.speak('invalid master password.....exiting')
-            self.logger.debug("invalid master password")
-            sys.exit()
-
+            self.speak("Insufficient permissions to change password")
+            self.logger.error("Insufficient permissions to change password")
     def authUser(self, rpass, pcode):
         if (pcode == rpass[0][1]):
             self.speak("Passcode matched.... ")
@@ -188,6 +181,11 @@ class AgentCovia:
             self.speak(wish)
             self.getTime()
             self.usr = rpass[0][0]
+            Sqlquery = 'SELECT email_access, internet_access, master_access FROM `permissions` WHERE `user`=(SELECT cred_id FROM `credentials` WHERE username="' + self.usr + '")'
+            userAccess = self.getDatafromDb(Sqlquery)
+            self.permissions["master_access"] = int(userAccess[0][2])
+            self.permissions["internet_access"] = int(userAccess[0][1])
+            self.permissions["email_access"] = int(userAccess[0][0])
             self.processRequests()
         else:
             self.speak("Invalid passcode.....Exiting.")
@@ -214,7 +212,7 @@ class AgentCovia:
         queryx = query.split()
         queryx = [word for word in queryx if not word in set(
             stopwords.words('english'))]
-        if (self.validateCommand(queryx, self.webSearch)):
+        if (self.validateCommand(queryx, self.webSearch) and (self.permissions["internet_access"]==1 or self.permissions["master_access"]==1)):
             if (r'search' in query):
                 self.getInfoWebSearch(query)
             elif (r'go to'):
@@ -228,7 +226,7 @@ class AgentCovia:
                 self.openFirefox(url)
         elif ('change your password' == query):
             self.setPassword()
-        elif (self.validateCommand(queryx, self.says) and (r'something' in query)):
+        elif (self.validateCommand(queryx, self.says) and (r'something' in query) and (self.permissions["internet_access"]==1 or self.permissions["master_access"]==1)):
             self.tellInfoFromWiki(query)
         elif self.validateCommand(queryx, self.var3):
             self.getTime()
@@ -262,7 +260,7 @@ class AgentCovia:
                 else:
                     self.speak('app not found')
 
-        elif (self.validateCommand(queryx, self.newsText)):
+        elif (self.validateCommand(queryx, self.newsText) and (self.permissions["internet_access"]==1 or self.permissions["master_access"]==1)):
             self.speak("fetching headlines from IndiaToday")
             url = 'https://www.indiatoday.in/top-stories'
             self.getHeadines(url)
@@ -275,13 +273,13 @@ class AgentCovia:
         elif (r'shutdown' in query) and self.validateCommand(queryx, self.mypc):
             os.system("shutdown /s /t 1")
 
-        elif (r'restart' in query) and self.validateCommand(queryx, self.mypc):
+        elif (r'restart' in query) and self.validateCommand(queryx, self.mypc) and self.permissions["master_access"]==1:
             os.system("shutdown /r /t 1")
         elif (r'lock' in query) and self.validateCommand(queryx, self.mypc):
             ctypes.windll.user32.LockWorkStation()
 
         elif (self.validateCommand(queryx, self.logoutCmd) or (r'out' in query)) and self.validateCommand(queryx,
-                                                                                                          self.mypc):
+                                                                                                          self.mypc) and self.permissions["master_access"]==1:
             os.system("shutdown -l")
         elif (query in self.exitCmd):
             self.speak('Good bye!')
@@ -456,15 +454,20 @@ class AgentCovia:
     def sendEmail(self):
         self.speak('Who is the recipient?')
         recipient = self.listenAudio()
-        if (recipient != None):
+        recipient = recipient.replace(' ', '')
+        if (recipient != None and (self.permissions["master_access"]==1 or self.permissions["email_access"]==1)):
             SqlQueryRecipient = 'SELECT email_id FROM email_list WHERE shortname = "' + recipient + '"'
             EmailIdList = self.getDatafromDb(SqlQueryRecipient)
             if (len(EmailIdList)):
                 emailId = EmailIdList[0][0]
                 self.speak('What should I say to him?')
                 content = self.listenAudioLong()
+                if(content==None):
+                    content = "Hii there"
                 self.speak('can i send the message?')
                 resp = self.listenAudio()
+                if (resp == None):
+                    resp = "yes"
                 if (resp == 'yes'):
                     userSql = 'SELECT email, epass FROM email_auth WHERE cred_id=(SELECT cred_id FROM credentials WHERE username= "' + self.usr + '")'
                     userEmailCred = self.getDatafromDb(userSql)
@@ -492,13 +495,13 @@ class AgentCovia:
             self.speak("Agent started")
             self.logger.info("Agent started")
             self.speak("please verify your identity!")
-            username = self.listenAudio()
-            username = username.replace(' ', '')
+            username = str(input())
+            self.logger.info('USERNAME: '+ username)
             Sqlquery = 'select username,password from credentials where username="' + username + '"'
             userData = self.getDatafromDb(Sqlquery)
             if (len(userData)):
-                self.speak('Say the password')
-                passcode = self.listenAudio()
+                self.speak('Enter the password')
+                passcode = str(input())
                 self.logger.debug(passcode)
                 self.speak('Processing passcode')
                 self.authUser(userData, passcode)
@@ -517,16 +520,17 @@ class AgentCovia:
     def quit(self):
         sys.exit()
 
-
-root = Tk()
+#
+# root = Tk()
+# root.geometry('800x500')
+# root.minsize(400, 300)
+# photo = PhotoImage(file='spcir.png')
+# label = Label(image=photo)
+# label.pack()
+# startButton = Button(root, text='Start', bg='green', command=obj.driverFunc)
+# startButton.pack()
+# StopButton = Button(root, text='Stop', bg='red', command=obj.quit)
+# StopButton.pack()
+# root.mainloop()
 obj = AgentCovia()
-root.geometry('800x500')
-root.minsize(400, 300)
-photo = PhotoImage(file='spcir.png')
-label = Label(image=photo)
-label.pack()
-startButton = Button(root, text='Start', bg='green', command=obj.driverFunc)
-startButton.pack()
-StopButton = Button(root, text='Stop', bg='red', command=obj.quit)
-StopButton.pack()
-root.mainloop()
+obj.driverFunc()
