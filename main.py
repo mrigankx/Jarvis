@@ -455,6 +455,7 @@ class AgentCovia:
         self.speak('Who is the recipient?')
         recipient = self.listenAudio()
         recipient = recipient.replace(' ', '')
+
         if (recipient != None and (self.permissions["master_access"]==1 or self.permissions["email_access"]==1)):
             SqlQueryRecipient = 'SELECT email_id FROM email_list WHERE shortname = "' + recipient + '"'
             EmailIdList = self.getDatafromDb(SqlQueryRecipient)
